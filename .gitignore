@@ -29,3 +29,6 @@ node_modules
 
 # Sublime project files
 node-bigcommerce.sublime-*
+
+# JetBrains IDEs (IntelliJ)
+.idea
