@@ -1,3 +1,7 @@
+4.1.1
+=====
+- [security] `verify` now throws if `config.secret` is empty or missing instead of computing an HMAC with an empty key
+
 4.0.0
 =====
 - [breaking] Updated to `async/await`
