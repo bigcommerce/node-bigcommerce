@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 
 const BigCommerce = require('../lib/bigcommerce'),
   Request = require('../lib/request'),
+  crypto = require('crypto'),
   should = require('chai').should(),
   sinon = require('sinon');
 
@@ -41,6 +42,38 @@ describe('BigCommerce', () => {
   });
 
   describe('#verify', () => {
+    context('given a missing client secret', () => {
+      it('should throw before verifying', () => {
+        try {
+          new BigCommerce({ accessToken: '123456', storeHash: '12abc' })
+            .verify('eyJmb28iOiJmb28ifQ==.Zm9v');
+        } catch (e) {
+          e.message.should.match(/secret/);
+          return;
+        }
+
+        throw new Error('You shall not pass!');
+      });
+    });
+
+    context('given an empty client secret', () => {
+      it('should reject a payload signed with an empty key', () => {
+        const json = '{"foo":"foo"}';
+        const signature = crypto.createHmac('sha256', '').update(json).digest('hex');
+        const forged = Buffer.from(json).toString('base64') + '.' +
+          Buffer.from(signature).toString('base64');
+
+        try {
+          new BigCommerce({ secret: '' }).verify(forged);
+        } catch (e) {
+          e.message.should.match(/secret/);
+          return;
+        }
+
+        throw new Error('You shall not pass!');
+      });
+    });
+
     context('given a null signed request', () => {
       it('should return null', () => {
         try {
