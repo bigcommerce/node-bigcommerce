@@ -186,7 +186,6 @@ describe('Request', () => {
       .post('/orders')
       .reply(200, zipped, {
         'X-Transfer-Length': String(zipped.length),
-        'Content-Length': undefined,
         'Content-Encoding': 'gzip',
         'Content-Type': 'application/json'
       });
@@ -213,7 +212,7 @@ describe('Request', () => {
       .post('/orders')
       .reply(200, buffer, {
         'X-Transfer-Length': String(buffer.length),
-        'Content-Length': undefined,
+
         'Content-Type': 'application/json'
       });
 
