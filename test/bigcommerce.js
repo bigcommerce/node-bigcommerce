@@ -39,6 +39,32 @@ describe('BigCommerce', () => {
     it('should set api version to a default', () => {
       new BigCommerce({ apiVersion: 'v3' }).apiVersion.should.equal('v3');
     });
+
+    context('given limiter config', () => {
+      it('should create a semaphore when maxConcurrent is provided', () => {
+        const limitedBc = new BigCommerce({ limiter: { maxConcurrent: 3 } });
+        should.exist(limitedBc._semaphore);
+        limitedBc._semaphore.limit.should.equal(3);
+      });
+
+      it('should create a token bucket when requestsPerSecond is provided', () => {
+        const limitedBc = new BigCommerce({ limiter: { requestsPerSecond: 5 } });
+        should.exist(limitedBc._tokenBucket);
+        limitedBc._tokenBucket.tokensPerSecond.should.equal(5);
+      });
+
+      it('should create both gates when both options are provided', () => {
+        const limitedBc = new BigCommerce({ limiter: { maxConcurrent: 5, requestsPerSecond: 10 } });
+        should.exist(limitedBc._semaphore);
+        should.exist(limitedBc._tokenBucket);
+      });
+
+      it('should not create any gates when limiter is omitted', () => {
+        const plainBc = new BigCommerce({ test: true });
+        should.not.exist(plainBc._semaphore);
+        should.not.exist(plainBc._tokenBucket);
+      });
+    });
   });
 
   describe('#verify', () => {
@@ -379,6 +405,66 @@ describe('BigCommerce', () => {
           res.should.deep.equal({ text: '' });
           sinon.assert.calledWith(self.requestStub, 'delete', '/stores/12abc/v2/foo', undefined);
         });
+    });
+  });
+
+  describe('#request with limiter', () => {
+    beforeEach(() => {
+      self.requestStub = self.sandbox.stub(Request.prototype, 'run')
+        .returns(Promise.resolve({ ok: true }));
+    });
+
+    it('should pass maxRetries config through to the Request via createAPIRequest', () => {
+      const bcWithRetries = new BigCommerce({
+        accessToken: '123456',
+        storeHash: '12abc',
+        maxRetries: 5
+      });
+      bcWithRetries.config.maxRetries.should.equal(5);
+      const req = bcWithRetries.createAPIRequest();
+      req.maxRetries.should.equal(5);
+    });
+
+    it('should acquire and release the semaphore on each request', () => {
+      const pacedBc = new BigCommerce({
+        accessToken: '123456',
+        storeHash: '12abc',
+        limiter: { maxConcurrent: 2 }
+      });
+
+      const acquireSpy = self.sandbox.spy(pacedBc._semaphore, 'acquire');
+      const releaseSpy = self.sandbox.spy(pacedBc._semaphore, 'release');
+
+      return pacedBc.get('/products').then(() => {
+        sinon.assert.calledOnce(acquireSpy);
+        sinon.assert.calledOnce(releaseSpy);
+      });
+    });
+
+    it('should release the semaphore even when the request fails', () => {
+      const pacedBc = new BigCommerce({
+        accessToken: '123456',
+        storeHash: '12abc',
+        limiter: { maxConcurrent: 2 }
+      });
+
+      self.requestStub.returns(Promise.reject(new Error('network error')));
+      const releaseSpy = self.sandbox.spy(pacedBc._semaphore, 'release');
+
+      return pacedBc.get('/products')
+        .catch(() => {
+          sinon.assert.calledOnce(releaseSpy);
+        });
+    });
+
+    it('should make requests normally without pacing config', () => {
+      const normalBc = new BigCommerce({
+        accessToken: '123456',
+        storeHash: '12abc'
+      });
+      return normalBc.get('/products').then(res => {
+        res.should.deep.equal({ ok: true });
+      });
     });
   });
 });

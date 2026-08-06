@@ -51,7 +51,36 @@ describe('Request', () => {
           });
       });
     });
+
+    context('given maxRetries is exhausted', () => {
+      beforeEach(() => {
+        nock.cleanAll();
+        nock('https://api.bigcommerce.com')
+          .post('/orders')
+          .reply(429, { }, { 'X-Retry-After': 0.1 })
+          .post('/orders')
+          .reply(429, { }, { 'X-Retry-After': 0.1 })
+          .post('/orders')
+          .reply(429, { }, { 'X-Retry-After': 0.1 });
+      });
+
+      it('should reject after exhausting all retries', () => {
+        const limitedRequest = new Request('api.bigcommerce.com', {
+          headers: { 'Content-Type': 'application/json' },
+          maxRetries: 2
+        });
+
+        return limitedRequest.run('post', '/orders')
+          .then(() => should.fail('You shall not pass!'))
+          .catch(e => {
+            e.message.should.match(/retries exhausted/);
+            e.code.should.equal(429);
+            e.retryAfter.should.equal(0.1);
+          });
+      });
+    });
   });
+
 
   context('given a bad request or internal error is returned', () => {
     beforeEach(() => {
